@@ -14,6 +14,8 @@ dre = gmat3.financials
 # 3. Transpor a matriz para que as datas fiquem nas linhas (formato padrão de análise de dados)
 dre_df = dre.T
 
+fluxo_caixa_df = gmat3.cashflow.T
+
 # 4. Calcular as Margens
 # Os nomes das linhas no yfinance vêm em inglês: 'Total Revenue', 'Gross Profit', 'Net Income'
 try:
@@ -22,16 +24,31 @@ try:
     
     # Margem Líquida = (Lucro Líquido / Receita Total) * 100
     dre_df['Margem Líquida (%)'] = (dre_df['Net Income'] / dre_df['Total Revenue']) * 100
+
+    # Adicionando colunas de EBIT e Impostos, caso existam
+    dre_df['EBIT / Lucro Operacional'] = dre_df.get('EBIT', dre_df.get('Operating Income', 0))
+    dre_df['Impostos (IR/CSLL)'] = dre_df.get('Tax Provision', 0)
+
+    # Adicionando coluna de Resultado Financeiro, caso exista
+    dre_df['Resultado Financeiro'] = dre_df.get('Net Non Operating Interest Income Expense', dre_df.get('Interest Expense', 0))
+
+    # Adicionando coluna de Depreciação e Amortização, caso exista
+    dre_df['Depreciation and Amortization'] = dre_df.get('Depreciation', 0)
+
+    #Adicionando o CAPEX (Capital Expenditures) caso exista
+    dre_df['CAPEX'] = fluxo_caixa_df.get('Capital Expenditure', 0)
     
     # 5. Filtrar e exibir apenas as colunas de interesse para o Valuation
-    colunas_foco = ['Total Revenue', 'Gross Profit', 'Net Income', 'Margem Bruta (%)', 'Margem Líquida (%)']
+    colunas_foco = ['Total Revenue', 'Gross Profit', 'Net Income', 'Margem Bruta (%)', 'Margem Líquida (%)', 
+                    'EBIT / Lucro Operacional', 'Impostos (IR/CSLL)', 'Resultado Financeiro', 'Depreciation and Amortization', 'CAPEX']
     resultado = dre_df[colunas_foco]
     
-    print("Análise de Margens - Grupo Mateus (GMAT3):\n")
-    # Arredondando os valores decimais para facilitar a leitura no console
-    print(resultado.round(2))
+    # Filtrar apenas as colunas que realmente existem no DataFrame para evitar erros
+    colunas_existentes = [col for col in colunas_foco if col in dre_df.columns]
+    resultado = dre_df[colunas_existentes]
     
+    print("DRE Expandida para Valuation - Grupo Mateus (GMAT3):\n")
+    print(resultado)
+
 except KeyError as e:
-    print(f"Erro ao encontrar a coluna: {e}")
-    print("\nVerifique as colunas disponíveis na DRE extraída:")
-    print(dre_df.columns.tolist())
+    print(f"Erro no processamento: {e}")
