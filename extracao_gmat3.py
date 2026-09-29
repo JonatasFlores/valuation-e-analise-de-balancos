@@ -32,8 +32,8 @@ try:
     # Adicionando coluna de Resultado Financeiro, caso exista
     dre_df['Resultado Financeiro'] = dre_df.get('Net Non Operating Interest Income Expense', dre_df.get('Interest Expense', 0))
 
-    # Adicionando coluna de Depreciação e Amortização, caso exista
-    dre_df['Depreciation and Amortization'] = dre_df.get('Depreciation', 0)
+    # Adicionando a Depreciação e Amortização, caso exista
+    dre_df['Depreciation and Amortization'] = fluxo_caixa_df.get('Depreciation And Amortization', fluxo_caixa_df.get('Depreciation', 0))
 
     #Adicionando o CAPEX (Capital Expenditures) caso exista
     dre_df['CAPEX'] = fluxo_caixa_df.get('Capital Expenditure', 0)
@@ -49,6 +49,46 @@ try:
     
     print("DRE Expandida para Valuation - Grupo Mateus (GMAT3):\n")
     print(resultado)
+    # 1. Ajuste de Sinais: Garantir que Impostos reduzam o lucro (se vieram positivos na base, viram negativos)
+    impostos_ajustados = resultado['Impostos (IR/CSLL)'].apply(lambda x: x if x < 0 else -x)
+    nopat = resultado['EBIT / Lucro Operacional'] + impostos_ajustados # Lucro Operacional após impostos
+            
+    # 2. Calcular o FCFF (Fluxo de Caixa Livre)
+    # Fórmula: NOPAT + Depreciação + CAPEX (O CAPEX do Yahoo já costuma vir negativo, então somamos)
+    resultado['FCFF'] = nopat + resultado['Depreciation and Amortization'] + resultado['CAPEX']
+        
+    print("\nHistórico de Geração de Caixa Livre (FCFF):")
+    print(resultado[['EBIT / Lucro Operacional', 'FCFF']])
+    
+    # 3. Motor de Valuation Automatizado
+    # Premissas do Analista para o Grupo Mateus:
+    wacc = 0.12 # Custo de Capital da empresa (Ex: 12% ao ano)
+    g = 0.03    # Crescimento na Perpetuidade (Ex: 3% ao ano, acompanhando a inflação/PIB)
+    crescimento_projetado = 0.08 # Projeção de crescimento agressivo de 8% nos próximos 5 anos
+        
+    # Pegar o FCFF do ano mais recente (linha 0 da tabela)
+    ultimo_fcff = resultado['FCFF'].iloc[0] 
+        
+    print("\n--- PROJEÇÃO DE VALUATION (PRÓXIMOS 5 ANOS) ---")
+    dcf_valor_presente = 0
+        
+    for ano in range(1, 6):
+        fcff_projetado = ultimo_fcff * ((1 + crescimento_projetado) ** ano)
+        # Descontando o valor para dinheiro de "hoje" usando o WACC
+        valor_presente_ano = fcff_projetado / ((1 + wacc) ** ano)
+        dcf_valor_presente += valor_presente_ano
+        print(f"Ano {ano}: FCFF Projetado = R$ {fcff_projetado:,.2f} | Valor Presente = R$ {valor_presente_ano:,.2f}")
+            
+        # 4. Valor Terminal (O valor da empresa do ano 5 até o infinito)
+        valor_terminal = (ultimo_fcff * ((1 + crescimento_projetado)**5) * (1 + g)) / (wacc - g)
+        vt_descontado = valor_terminal / ((1 + wacc) ** 5)
+        
+    # 5. Enterprise Value (Valor da Firma)
+    valor_firma = dcf_valor_presente + vt_descontado
+    print(f"\nValor da Firma (Enterprise Value) Projetado: R$ {valor_firma:,.2f}")   
+       
 
 except KeyError as e:
     print(f"Erro no processamento: {e}")
+
+  
